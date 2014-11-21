@@ -253,14 +253,29 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
           // to create it in <select> and IE barfs otherwise.
           optionTemplate = jqLite(document.createElement('option')),
           optGroupTemplate =jqLite(document.createElement('optgroup')),
-          unknownOption = optionTemplate.clone();
+          unknownOption;
 
       // find "null" option
       for (var i = 0, children = element.children(), ii = children.length; i < ii; i++) {
         if (children[i].value === '') {
           emptyOption = nullOption = children.eq(i);
-          break;
+          if (unknownOption) break;
+        } else if (children[i].value === '?') {
+          unknownOption = children.eq(i);
+          if (emptyOption) break;
         }
+      }
+
+      if (!unknownOption) {
+        unknownOption = optionTemplate.clone();
+        unknownOption.val('?');
+      } else {
+        // compile the element since there might be bindings in it
+        $compile(unknownOption)(scope);
+
+        // remove the class, which is added automatically because we recompile the element and it
+        // becomes the compilation root
+        unknownOption.removeClass('ng-scope');
       }
 
       selectCtrl.init(ngModelCtrl, nullOption, unknownOption);
@@ -282,6 +297,8 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
 
 
       function setupAsSingle(scope, selectElement, ngModelCtrl, selectCtrl) {
+        if (!emptyOption) emptyOption = optionTemplate.clone();
+
         ngModelCtrl.$render = function() {
           var viewValue = ngModelCtrl.$viewValue;
 
@@ -379,6 +396,9 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
           // remove the label from the element. wtf?
           nullOption.remove();
         }
+
+        // Same reason as nullOption above
+        if (unknownOption.parent()) unknownOption.remove();
 
         // clear contents, we'll add what's needed based on the model
         selectElement.empty();
@@ -536,7 +556,8 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
               lastElement,
               element,
               label,
-              optionId;
+              optionId,
+              unknownLabel = unknownOption.text();
 
           trackKeysCache = {};
 
@@ -575,12 +596,17 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
             });
           }
           if (!multiple) {
+            if (!anySelected) {
+              // option could not be found, we have to insert the undefined item
+              optionGroups[''].unshift({id:'?', label:unknownLabel, selected:true});
+              ctrl.$setValidity('unknownOption', false);
+            } else {
+              ctrl.$setValidity('unknownOption', true);
+            }
+
             if (nullOption || viewValue === null) {
               // insert null option if we have a placeholder, or the model is null
               optionGroups[''].unshift({id:'', label:'', selected:!anySelected});
-            } else if (!anySelected) {
-              // option could not be found, we have to insert the undefined item
-              optionGroups[''].unshift({id:'?', label:'', selected:true});
             }
           }
 
