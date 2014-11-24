@@ -179,7 +179,8 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
           optionsMap = {},
           ngModelCtrl = nullModelCtrl,
           nullOption,
-          unknownOption;
+          unknownOption,
+          validateOptions = $attrs['ngValidateOptions'];
 
 
       self.databound = $attrs.ngModel;
@@ -199,6 +200,7 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
         if (ngModelCtrl.$viewValue == value) {
           $element.val(value);
           if (unknownOption.parent()) unknownOption.remove();
+          this.setUnknownOptionValidity(true);
         }
         // Workaround for https://code.google.com/p/chromium/issues/detail?id=381459
         // Adding an <option selected="selected"> element to a <select required="required"> should
@@ -214,6 +216,7 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
           delete optionsMap[value];
           if (ngModelCtrl.$viewValue == value) {
             this.renderUnknownOption(value);
+            this.setUnknownOptionValidity(false);
           }
         }
       };
@@ -232,9 +235,16 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
         return optionsMap.hasOwnProperty(value);
       };
 
+      self.setUnknownOptionValidity = angular.isDefined(validateOptions) ? function (valid) {
+        ngModelCtrl.$unknownOption = !valid;
+        ngModelCtrl.$setValidity('unknown-option', valid);
+      } : function (valid) {
+        ngModelCtrl.$unknownOption = !valid;
+      };
+
       $scope.$on('$destroy', function() {
         // disable unknown option so that we don't do work when the whole select is being destroyed
-        self.renderUnknownOption = noop;
+        self.setUnknownOptionValidity = self.renderUnknownOption = noop;
       });
     }],
 
@@ -304,6 +314,7 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
 
           if (selectCtrl.hasOption(viewValue)) {
             if (unknownOption.parent()) unknownOption.remove();
+            selectCtrl.setUnknownOptionValidity(true);
             selectElement.val(viewValue);
             if (viewValue === '') emptyOption.prop('selected', true); // to make IE9 happy
           } else {
@@ -311,6 +322,7 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
               selectElement.val('');
             } else {
               selectCtrl.renderUnknownOption(viewValue);
+             selectCtrl.setUnknownOptionValidity(false);
             }
           }
         };
@@ -318,6 +330,7 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
         selectElement.on('change', function() {
           scope.$apply(function() {
             if (unknownOption.parent()) unknownOption.remove();
+            selectCtrl.setUnknownOptionValidity(true);
             ngModelCtrl.$setViewValue(selectElement.val());
           });
         });
@@ -596,12 +609,12 @@ var selectDirective = ['$compile', '$parse', function($compile,   $parse) {
             });
           }
           if (!multiple) {
-            if (!anySelected) {
+            if (!anySelected && viewValue !== null) {
               // option could not be found, we have to insert the undefined item
               optionGroups[''].unshift({id:'?', label:unknownLabel, selected:true});
-              ctrl.$setValidity('unknownOption', false);
+              selectCtrl.setUnknownOptionValidity(false);
             } else {
-              ctrl.$setValidity('unknownOption', true);
+              selectCtrl.setUnknownOptionValidity(true);
             }
 
             if (nullOption || viewValue === null) {
